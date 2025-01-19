@@ -12,6 +12,7 @@ def test_default_settings() -> None:
     settings = Settings()
 
     assert settings.defaults == {}
+    assert settings.trust == set()
 
 
 def test_settings_from_default_location(settings_path: Path) -> None:
@@ -62,10 +63,39 @@ def test_settings_from_param(
     assert settings.defaults == {"from": "file"}
 
 
-def test_settings_definedBut_missing(
+def test_settings_defined_but_missing(
     settings_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("COPIER_SETTINGS_PATH", str(settings_path))
 
     with pytest.warns(MissingSettingsWarning):
         Settings.from_file()
+
+
+@pytest.mark.parametrize(
+    ("repository", "trust", "is_trusted"),
+    [
+        ("https://github.com/user/repo.git", set(), False),
+        (
+            "https://github.com/user/repo.git",
+            {"https://github.com/user/repo.git"},
+            True,
+        ),
+        ("https://github.com/user/repo", {"https://github.com/user/repo.git"}, False),
+        ("https://github.com/user/repo.git", {"https://github.com/user/"}, True),
+        ("https://github.com/user/repo.git", {"https://github.com/user/repo"}, False),
+        ("https://github.com/user/repo.git", {"https://github.com/user"}, False),
+        ("https://github.com/user/repo.git", {"https://github.com/"}, True),
+        ("https://github.com/user/repo.git", {"https://github.com"}, False),
+        (f"{Path.home()}/template", set(), False),
+        (f"{Path.home()}/template", {f"{Path.home()}/template"}, True),
+        (f"{Path.home()}/template", {"~/template"}, True),
+        (f"{Path.home()}/path/to/template", {"~/path/to/template"}, True),
+        (f"{Path.home()}/path/to/template", {"~/path/to/"}, True),
+        (f"{Path.home()}/path/to/template", {"~/path/to"}, False),
+    ],
+)
+def test_is_trusted(repository: str, trust: set[str], is_trusted: bool) -> None:
+    settings = Settings(trust=trust)
+
+    assert settings.is_trusted(repository) == is_trusted
